@@ -61,6 +61,53 @@ PHP提供了大量的内嵌函数，例如`addslashes`、`mysql_escape_string`�
 
 PHP会提供`array`的数据结构，在各种代码中随意使用，但由于混合了数组和字典，经常导致混淆。这种混淆经常导致甚至是有经验的程序员引入重大的安全隐患，例如<a href="https://www.drupal.org/SA-CORE-2014-005">Drupal SA-CORE-2014-005</a> 和 <a href="http://cgit.drupalcode.org/drupal/commit/?id=26a7752c34321fd9cb889308f507ca6bdb777f08">the patch</a>。
 
+### 框架相关
+
+#### URL路由
+
+PHP默认的路由机制是使用文件目录中`.php`的后缀，这带来很多风险
+
+* 文件上传没有进行文件名过滤导致的远程执行风险（换句话说，服务化器执行了外部的代码）。在接收远程文件上传时，请确保文件名和内容经过过滤。
+
+* 源代码和配置文件存储在公共可访问的目录中，可以被下载。误配置或者缺少配置可能会导致源代码或者包含密码等信息的配置文件被攻击者随意下载（换句话说，服务器暴露了私密的信息）。你可以使用`.htaccess`来限制访问，但这并不是最完美的方案，因为它是'默认不安全的'，也没有可替代的方案。
+
+* URL路由机制只是模块系统。这意味着攻击者可能可以使用非法的文件名作为进入点，带来认证机制可能被完全绕过的风险。这在PHP中极其容易，因为有全局可访问的请求信息（例如`$_GET`），所以文件层面的代码即可操作整个请求、而不是在固定的函数中进行请求处理。
+
+* URL路由机制的缺失导致开发者开发各自的路由方法。这往往是不安全的，容易导致请求处理函数未进行合适的请求限制。
+
+#### 输入处理
+
+PHP将HTTP的输入转换成了数组、而不是简单字符串。这会导致对于数据的混淆，容易导致安全风险。例如下面的代码是一个密码重置的一次性机制判断
+
+    $supplied_nonce = $_GET['nonce'];
+    $correct_nonce = get_correct_value_somehow();
+
+    if (strcmp($supplied_nonce, $correct_nonce) == 0) {
+        // Go ahead and reset the password
+    } else {
+       echo 'Sorry, incorrect link';
+    }
+
+如果攻击者使用如下的查询字符串
+
+     http://example.com/?nonce[]=a
+
+会导致`$supplied_nonce`成为数组、`strcmp()`函数会返回NULL（连异常都不会抛出），由于若类型转换和没有使用`===`操作符，校验成功，攻击者可以在不提供原密码的情况下进行密码修改。
+
+相似的case和`array`结构导致的混淆事故，可以在<a href="https://www.drupal.org/SA-CORE-2014-005"> Drupal SA-CORE-2014-005 </a>，参见<a href ="http://www.zoubi.me/blog/drupageddon-sa-core-2014-005-drupal-7-sql-injection-exploit-demo"> example exploit</a>。
+
+#### 模板语言
+
+PHP本质上是一门模板语言，但它默认并没有提供HTML转义，在web应用中带来极大使用困难，可以参见下面的XSS部分。
+
+#### 其它不足
+
+另外有很多web框架应该支持的重要特性，例如默认开启CSRF的保护机制。因为PHP只是提供了一个基本的、功能足够的特性来创建web站点，很多不了解CSRF保护机制的人就仅使用了PHP基本的功能。
+
+### 第三方PHP代码
+
+
+
 # 配置
 
 # 不可靠的数据
