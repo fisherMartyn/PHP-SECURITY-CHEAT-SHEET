@@ -53,6 +53,14 @@ PHP是弱类型的，意味着不正确的数据类型会被自动转换。这�
 
 #### php.ini
 
+PHP代码的行为经常强依赖于很多配置文件的设置，例如基本的错误处理配置等。这使得很难写出在所有场景下正常运行的代码。不同的库依赖不同的设置，使得很难使用第三方的代码，这在后面的'配置'部分也会提到。
+
+#### 无用的buildin函数
+
+PHP提供了大量的内嵌函数，例如`addslashes`、`mysql_escape_string`、`mysql_real_escape_string`等。这些试图提供安全的特性的函数经常是有bug的，并不能解决安全性的问题。许多内嵌的函数已经被弃用或者迁移，但由于向下兼容的规则，这些函数会保留很长时间。
+
+PHP会提供`array`的数据结构，在各种代码中随意使用，但由于混合了数组和字典，经常导致混淆。这种混淆经常导致甚至是有经验的程序员引入重大的安全隐患，例如<a href="https://www.drupal.org/SA-CORE-2014-005">Drupal SA-CORE-2014-005</a> 和 <a href="http://cgit.drupalcode.org/drupal/commit/?id=26a7752c34321fd9cb889308f507ca6bdb777f08">the patch</a>。
+
 # 配置
 
 # 不可靠的数据
