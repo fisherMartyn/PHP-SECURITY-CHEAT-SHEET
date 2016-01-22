@@ -24,7 +24,34 @@ PHP是弱类型的，意味着不正确的数据类型会被自动转换。这�
 
 几乎所有的PHP内置函数很多PHP库，不支持异常，而是用其它的报警机制(例如notice)，允许出错的代码继续运行。这也会隐藏很多bug。很多其它的语言、大部分高级语言，相对于PHP，开发者代码错误或者开发者未处理的运行时错误，都会导致程序停止执行，从而保护程序。
 
+考虑下面的程序，程序的目的是检查一个username是不是在数据库的黑名单中，以限制访问。
 
+    $db_link = mysqli_connect('localhost', 'dbuser', 'dbpassword', 'dbname');
+
+    function can_access_feature($current_user) {
+       global $db_link;
+       $username = mysqli_real_escape_string($db_link, $current_user->username);
+       $res = mysqli_query($db_link, "SELECT COUNT(id) FROM blacklisted_users WHERE username = '$username';");
+       $row = mysqli_fetch_array($res);
+       if ((int)$row[0] > 0) {
+           return false;
+       } else {
+           return true;
+       }
+    }
+
+    if (!can_access_feature($current_user)) {
+       exit();
+    }
+    // Code for feature here
+
+上面的代码可能产生各种各样的运行时错误，例如由于用户名和密码错误或者数据库server宕机可能导致的数据库连接失败、或者连接可能被server断开。在上述情况下，`mysqli`函数会抛出notice或者warnings，但不会抛出异常或者fatal error，代码会继续执行。变量`$row`会成为`NULL`，基于若类型转换`(int)$row[0]`会成为0，最终`can_access_feature`会返回`true`，用户会获得访问权限，不管用户是否在黑名单中。
+
+如果使用native的数据库API，需要在各个地方添加错误检查。然而由于这需要额外的工作、又如此容易被忽略，所以它是'默认不安全的'。这就是为什么访问数据库通常要采用<a href="https://secure.php.net/manual/en/intro.pdo.php">PHP Data Objects (PDO)</a>和其错误处理<a href="https://secure.php.net/manual/en/pdo.error-handling.php"> ERRMODE_WARNING or ERRMODE_EXCEPTION flags </a>，除非有特殊的原因，不会使用native API和错误检查工作。
+
+使用<a href="http://www.php.net/manual/en/function.error-reporting.php">error_reporting</a>函数将错误优先级设置越高越好，修复warnings，让系统越鲁棒越好。
+
+#### php.ini
 
 # 配置
 
