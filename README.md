@@ -178,6 +178,14 @@ All input is evil，所有用户的输入都不值得信任。输入必须被用
 
 当你使用`mysql_real_escape_string `来校验每个变量然后放入查询语句中，你难保一次都不会忘记，只要忘记一次就会是灾难。你无法保证一次都不会忘记。而且，你要保证你使用了引号，如果输入是数字的话，这会很不自然，容易忘记。使用prepare语句或者相似的API，它们会帮你做正确的转义和过滤。（大部分ORM框架也会做这种转义、帮你创建SQL）
 ### 使用prepare语句
+prepare语句非常安全。在prepare语句中，SQL命令和数据是分开的，每个用户输入都会认为是数据，进行处理。
+
+相关的内容可以参考PHP的<a href="https://secure.php.net/manual/en/mysqli.quickstart.prepared-statements.php">mysqli prepare statement</a>和<a href="https://secure.php.net/manual/en/pdo.prepare.php">PDO prepare statement</a>
+
+#### prepare语句失效的场景
+
+进行动态的查询、不支持prepare的变量，或者数据库引擎不支持prepare语句会是问题。例如，PDO MySQL不支持`？`作为限制符。而且限制符不能作为表名或者列名用于`select`语句中。在此类的场景中，尽量使用框架提供的query builder，如果框架没有功能，使用Composer和Packagist安装几个第三方包，不要自己做。
+
 
 # 其它注入
 
