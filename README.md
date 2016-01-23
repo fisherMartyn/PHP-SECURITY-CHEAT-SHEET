@@ -131,12 +131,53 @@ All input is evil，所有用户的输入都不值得信任。输入必须被用
 `$_SERVER`、`$_GET`、`$_POST`、`$_REQUEST`、`$_FILES`和`$_COOKIE`这些超全局变量也不应该被信任。尽管`$_REQUEST`中并非所有的数据都可以被用户伪造，但还是有相当部分的可能被伪造，特别是处理HTTP header的那部分(以HTTP_开头的)。
 
 ## 文件上传
+来自用户上传的文件会带来巨大的安全隐患，特别是该文件可以被其他用户下载时。例如：
+
+* 任何HTML文件可能会导致xss攻击。
+* 任何PHP文件可能会带来远程代码执行的风险。
+
+由于PHP对于代码执行的检查并不严格（带上合适的扩展名即可），对于使用PHP搭建的web服务器一定要确保上传进行合适的文件名过滤后再进行保存。
 
 ## 处理$_FILES数组的常见错误
 
+如下的代码片段、或者类似功能的代码是很常见的：
+
+    if ($_FILES['some_name']['type'] == 'image/jpeg') {  
+       //Proceed to accept the file as a valid image
+    }
+然而`type`并不是启发式的去校验的，而仅仅是接收了HTTP请求中的数据，这很容易被客户端伪造。一个更好的去校验文件类型的方法是使用`finfo`库，尽管这种方法也并不完美。
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $fileContents = file_get_contents($_FILES['some_name']['tmp_name']);
+    $mimeType = $finfo->buffer($fileContents);
+    
+尽管这会占用服务器的计算资源，但`$mimeType`是更好的判断文件类型的方式，会阻止一些用户上传危险的文件，并伪装成image等形式，来造成攻击行为。
+
 ## 使用$_REQUEST
 
+强烈不建议使用`$_REQUEST`。这个超全局变量不仅包含了GET和POST，还包含了用户请求的cookies等信息，所有的这些数据被组合在了一个数组里，导致很难检测数据的来源，很容易导致混淆、易于犯错、容易导致安全风险。
+
 # 数据库
+单个mysql注入就会直接操纵整个网站，所以每个黑客都会首先尝试mysql注入，防止mysql注入也是PHP安全站点中最应该考虑的，遵循如下规则：
+
+## 不要在SQL中连接或者插入数据
+
+### 不要直接使用用户数据的string构造SQL
+     
+    $sql = "SELECT * FROM users WHERE username = '" . $username . "';";
+
+或者使用如下SQL：
+
+     $sql = "SELECT * FROM users WHERE username = '$username';";
+
+如果`$username`来自不可信任的来源，它可以包含类似于`'`这样的字符，从而可以执行其它命令，甚至删除数据库命令。使用prepare语句和绑定参数是更好的解决方案。PHP的<a href="http://php.net/mysqli">mysqli</a>和<a href="https://secure.php.net/pdo">PDO</a>提供了相关的特性。
+
+### 转义是不安全的
+
+`mysql_real_escape_string `这种转义是不安全的。不要依赖这个函数来防止SQL注入。
+
+当你使用`mysql_real_escape_string `来校验每个变量然后放入查询语句中，你难保一次都不会忘记，只要忘记一次就会是灾难。你无法保证一次都不会忘记。而且，你要保证你使用了引号，如果输入是数字的话，这会很不自然，容易忘记。使用prepare语句或者相似的API，它们会帮你做正确的转义和过滤。（大部分ORM框架也会做这种转义、帮你创建SQL）
+### 使用prepare语句
 
 # 其它注入
 
