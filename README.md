@@ -186,8 +186,44 @@ prepare语句非常安全。在prepare语句中，SQL命令和数据是分开的
 
 进行动态的查询、不支持prepare的变量，或者数据库引擎不支持prepare语句会是问题。例如，PDO MySQL不支持`？`作为限制符。而且限制符不能作为表名或者列名用于`select`语句中。在此类的场景中，尽量使用框架提供的query builder，如果框架没有功能，使用Composer和Packagist安装几个第三方包，不要自己做。
 
+### ORM
+ORM(Object Relational Mappers)，即对象关系映射，是非常好的安全手段。如果你使用ORM（例如<a href="http://www.doctrine-project.org/">Doctrine</a>），仍然可能会遭受SQL攻击。尽管ORM中注入攻击比较困难，不过串联ORM查询和串联SQL查询具有相同的问题。ORM也支持prepare语句。
+
+### 编码事宜
+#### 尽量使用UTF-8编码
+许多新型攻击模式依赖于编码。使用UTF-8作为数据库和应用的字符集，除非你有对其它字符集的强依赖。
+
+     $DB = new mysqli($Host, $Username, $Password, $DatabaseName);
+     if (mysqli_connect_errno())
+        trigger_error("Unable to connect to MySQLi database.");
+     $DB->set_charset('UTF-8');
 
 # 其它注入
+除了SQL以外，还有PHP中别的注入的可能性
+## 脚本注入
+一些PHP函数例如：
+
+* shell_exc
+* exec
+* passthru
+* system
+* 反引号(`)
+
+上面的函数或者命令将字符串作为脚本和命令名。基于配置，脚本命令泄露可以导致应用设置和配置文件泄露，这是非常严重的风险，会导致整个网站被控制。
+
+不要向这些函数传入未经过滤的输入，除非你确认它们一定是安全的。转义和其他对策是无效的，攻击者会尝试各种测试向量，不要相信新手程序员。
+
+## 代码注入
+所有的解释型语言，例如PHP，具有将字符串转换成命令并执行的能力。PHP中这个函数是`eval()`，使用`eval()`是不安全的，并不建议使用，除非你确认除了`eval`以外没有别的选择。`eval()`性能比较差。
+
+不要轻易在`preg_replace()`中输入未经过滤的输入，因为payload会被<a href ="https://stackoverflow.com/questions/4289923/in-which-languages-is-it-a-security-hole-to-use-user-supplied-regular-expression/4292439#4292439">`eval()'ed`</a>
+
+    preg_replace("/.*/e","system('echo /etc/passwd')");
+
+Reflection也有代码注入的风险。这属于高级的话题，请参考相关文档。
+
+## 其它注入
+LDAP、XPath和其他一些使用数组作为输入的第三方库，也容易被注入攻击。时刻记住有些数组不仅仅是数据，而是命令，所以在输入第三方库之前要进行检查。
 
 # XSS
 
