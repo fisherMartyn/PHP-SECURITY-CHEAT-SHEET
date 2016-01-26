@@ -226,8 +226,63 @@ Reflection也有代码注入的风险。这属于高级的话题，请参考相�
 LDAP、XPath和其他一些使用数组作为输入的第三方库，也容易被注入攻击。时刻记住有些数组不仅仅是数据，而是命令，所以在输入第三方库之前要进行检查。
 
 # XSS
+提到XSS时，主要指两个场景，分别可以通过如下方式缓解：
+
+## 没有tags
+大部分时候，用户不会提供未经转义的HTML标签。例如在一个cell或者textbox中输出用户数据。
+
+如果需要使用标准的PHP来输出(echo)模板，你可以通过对数据进行`htmlspecialchars `（或者下面的函数，对htmlspecialchars的封装）缓解XSS。尽管这并不推荐，因为需要开发者在每个使用场景都要调用。如果开发者忘记了，就存在XSS的风险。我们认为默认不安全的方法就是不安全的。
+
+除此之外，你可以使用默认进行HTML转义的模板引擎。所有需要输出到模板的HTML都需要经过HTML模板。
+
+如果你的项目不能转换到一个安全的模板引擎，你可以使用下面的函数来过滤数据。
+
+需要注意的是下面的函数对于`style`、`script`、`image`、`src`、`a`等等不安全的元素是无效的。所有输出到浏览器的数据，都要经过下面函数的过滤。
+
+    //xss mitigation functions
+    function xssafe($data,$encoding='UTF-8')
+    {
+        return htmlspecialchars($data,ENT_QUOTES |ENT_HTML401,$encoding);
+    }
+    
+    function xecho($data)
+    {
+        echo xssafe($data);
+    }
+    
+    //usage example
+    <input type='text' name='test' value='<?php xecho ("' onclick='alert(1)");?>' />
+    
+## 不可信的tags
+当你需要用户在你输出时提供HTML tags时（例如富文本博客评论、博客等等），但不是很信任使用者时，你需要使用安全编码库。这很困难，迁移过程也很慢，所以大量的网络应用有XSS注入攻击的风险。OWASP ESAPI对于不同类型数据的编码具有大量的编解码器，也有PHP的OWASP AntiSammy和HTMLPurifier。这需要一定的配置和学习的成本，但对于一个好的网络应用，是必不可少的。
+## 模板引擎
+有一些模板引擎可以帮助开发者或者设计者输出数据，防止XSS攻击。尽管模板引擎的初衷并不是安全、而是增加设计的体验，但大部分引擎输出时自动转义了变量，或者要求开发者显式的指定不需要转义的变量。这使得输出数据默认是安全的。类似的引擎包括twig、Smarty、Haanga和Rain TPL。
+
+模板引擎是很好的安全实践，因为它提供了开发者容易忘记的特性，默认的进行XSS保护的转义。对于安全很看重的系统应该使用默认安全的引擎。
+
+## 其它建议
+
+* 在web应用中，没有可信任的区域。很多开发者会留着网站的admin部分不进行XSS过滤，事实上大部分攻击者都会对admin的cookie的XSS感兴趣。任何需要输出的变量都要用上面提到的方案进行处理。删除每个`echo`，`print`和`printf`，替换成安全的模板引擎。
+* HTTP-Only cookies是很好的实践，很快每个浏览器都会支持。建议现在就开始使用。
+* 上面提供的函数只支持HTML语法。如果你put your Element Attributes without quotation，你就死定了。
+* <a href="https://www.owasp.org/index.php/Reflected_XSS">反射型XSS</a>和普通的XSS一样危险，可能出现在应用中任何部分。找到并解决它们。
+* 并不是所有的PHP都安装了mhash扩展，如果要做hash，需要先检查一下。否则你不能用SHA-256
+* 并不是所有的PHP都安装了mcrypt扩展，如果没安装，你没法做AES，使用前请先进行检查。
 
 # CSRF
+CSRF是修复理论上比较简单，但正确的修复确并不容易。首先提几个关于CSRF的tips：
+
+* 每个请求都是有用的，都要做CSRF的修复。不仅仅包括修改的请求、还包括执行时间较长的读请求。
+* CSRF容易发生在GET，也不要忽略POST。不要认为POST是安全的。
+
+<a href="https://www.owasp.org/index.php/PHP_CSRF_Guard"> OWASP PHP CSRFGuard</a>这是一个代码片段，讲了如何进行CSRF的修复。仅仅复制粘贴是无效的，后面会发布一个拷贝粘贴版本。当前，使用上面代码结合如下建议：
+
+* 对于重要的操作（修改密码、修改邮箱等）使用二次认证。
+* 如果你不清楚你的请求是否能够免于CSRF，使用验证码（尽管验证码会让用户体验变差）
+* 如果你的请求依赖于其它请求的部分内容（例如其它请求的cookies或者http header等部分），你也要对那些请求添加CSRF tokens。
+* AJAX的请求需要重建CSRF tokens。使用上面提供的代码，不要只依赖javscript。
+* CSRF会导致不便，结合你的设计和架构来使用。
+
 
 # 认证和SESSION管理
 
