@@ -285,7 +285,99 @@ CSRF是修复理论上比较简单，但正确的修复确并不容易。首先�
 
 
 # 认证和SESSION管理
+PHP并没有提供一个真正可用的认证模块，你需要基于自身的框架自行实现。然而用这种方式，很多PHP框架在这方面并不完美，因为它们都是被开源社区的开发者而不是安全专家开发出来的。下面有几个建议：
+## session管理
+PHP默认的session机制是安全的，生成的PHPSessionID足够随机，但是存储未必是安全的：
+
+* Session文件默认存储在temp目录(/tmp)，除非安装了suPHP，否则全局可访问。所有任何的LFI或者泄露都可以操作他们。
+* 默认配置下Session是存储在文件中的，这对于高访问量的网站来说，太慢了。你可以存储在memory文件中。
+* 你可以自己实现session机制，不再依赖PHP本身。可以将session存储在数据库，利用全部、部分或者直接不用php的session功能。
+
+### session劫持预防
+将session绑定到IP地址是好的习惯，这将很大程度上解决session劫持的场景。很多用户如果使用匿名工具（例如TOR），访问你的系统就可能出问题。
+
+在session第一次创建时，存储客户端的IP地址，确保后面的请求都是相同来源。下面的代码返回了客户端的IP地址
+
+    $IP = getenv ( "REMOTE_ADDR" );
+
+在本地环境下，无法获得有效的IP地址，可能是`:::1`或者`:::127`，调整你的IP检查逻辑。另外要注意使用`HTTP_X_FORWARDED_FOR`变量的相似代码，因为该数据可以被用户随意修改，易于被欺骗。（<a href="http://www.thespanner.co.uk/2007/12/02/faking-the-unexpected/">这里</a>和<a href="http://security.stackexchange.com/a/34327/37">这里</a>）
+
+### 将sessionid失效
+当发生异常时，需要将session相关信息失效（删除cookie、删除session存储、删除其他痕迹），记录日志是很好的做法。很多系统还会通过邮件通知用户。
+
+### session重置
+当替换行为发生时，需要将session进行重置（例如当用户登录时）。
+
+### 暴露的session
+sessonid应该是机密的，应用不应该在任何场合将它暴露在外面。不要讲sessionid用在url中的一部分。当sessoin传递机密数据时，使用TLS，否则可能发生session劫持。
+
+### Session Fixation
+使用` session_regenerate_id()`来替换sessonid，当用户登录时（甚至每个请求以后）
+
+### session过期
+
+session应该在一定时间后失效，无论是活动还是静止状态。超时的操作包括在活动状态下重置sessionid和静止状态下删除session信息。
+
+当退出登录发生时，完成所有的工作，包括清空相关的所有sesson记录。
+
+#### 不活动状态的超时
+如果当前的请求在上次请求以后已经经过了超过X秒，将其超时。这种清空需要在每次请求的时候进行判断，通常这个时间是30分钟，但也要根据具体应用来确定。
+
+这种超时使得用户在一台公共的机器登录后忘记登出时获得一定的安全退出机制。也一定程度上预防了session劫持。
+
+#### 正常的超时
+如果当前的session已经经过了一定的时间，即使处于活跃状态，也将其超时。超时时间通常在一天和一周之间不等。实现该特性需要记录session的开始时间。
+
+### Cookies
+处理PHP的cookie有一些tricks：
+#### 不要序列化
+不要序列化cookie中的数据，因为很容易被操作篡改，增加攻击数据。
+#### 恰当删除
+要安全的删除cookie，使用如下的代码：
+
+    setcookie ($name, "", 1);
+    setcookie ($name, false);
+    unset($_COOKIE[$name]);
+    
+第一行保证了浏览器过期了cookie数据，第二行是标准的删除cookie的方法，第三行从脚本中删除了cookie信息。很多手册中使用了`time()-3600`来做超时，但在浏览器时间不准确的情况下会无效。
+
+可以使用`session_name()`来获得php默认session cookie名。
+#### HTTP only
+现代的浏览器支持HTTP-Only的cookies，这种cookie只可以通过HTTP(s)请求访问，不能被javascript访问，所以XSS的代码无法访问。这是很好的安全实践，但是并不能很令人满意，因为很多主流的浏览器发现了很多Http-Only的cookie暴露给JavaScript的bug。
+
+PHP5.2+版本支持Http-Only cookie，你要手动设置http session cookie（不是使用session_start）
+
+    #prototype
+    bool setcookie ( string $name [, string $value [, int $expire = 0 [, string $path [, string $domain [, bool $secure = false [, bool $httponly = false ]]]]]] )
+    
+    #usage
+    if (!setcookie("MySessionID", $secureRandomSessionID,$generalTimeout, $applicationRootURLwithoutHost, NULL, NULL,true))
+        echo ("could not set HTTP-only cookie");
+        
+`$path`参数指定了cookie的有效范围，例如，如果你的网址是`example.com/some/folder`，`$path`应该是`/some/folder`，否则所有在`example.com`的应用都可以读取你的cookie。如果你使用全域名，可以忽略。域名参数强制了可访问域名，如果需要在多个域和IP访问，忽略该参数，否则老老实实设置。 如果安全参数设置，cookie可以通过HTTPs传递，例如：
+
+    $r=setcookie("SECSESSID","1203j01j0s1209jw0s21jxd01h029y779g724jahsa9opk123973",time()+60*60*24*7 /*a week*/,"/","owasp.org",true,true);
+    if (!$r) die("Could not set session cookie.");
+
+#### 浏览器相关
+很多浏览器都有cookies的问题，大部分可以通过设置超时时间为0来解决。
+
+## 认证
+### Remember me
+很多浏览器在Remember me特性上存在风险。通常的方式是生成一次性的token，存储在用户cookie中，另外在服务端也要存储用于校验。这个token应该和用户名密码没有任何关系，一个长随机数是推荐的做法。
+
+如果能够做到防止蛮力破解Remember me的token，增加锁定措施，是更好的做法。
+
+* 不要在cookie中存储和用户名、密码相关的任何数据
+
 
 # 配置和部署
+配置请参见<a href="https://www.owasp.org/index.php/PHP_Configuration_Cheat_Sheet">PHP配置安全手册</a>
 
 # 来源相关
+本博客来源于对OWSAP的<a href ="https://www.owasp.org/index.php/PHP_Security_Cheat_Sheet">PHP Security Cheat Sheet</a>的翻译，翻译权所有，转载请注明。
+
+其它安全相关
+
+* <a href="https://www.owasp.org/index.php/OWASP_Cheat_Sheet_Series">OWASP Cheat Sheet Series</a>
+
